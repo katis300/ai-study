@@ -122,13 +122,15 @@ def generate_ai_response(user_input):
     당신은 창고 관리 시스템(WMS)의 AI 비서입니다. 사용자의 질문을 분석하여 요청하는 '액션(action)'과 '개체명(entities)'을 JSON 형식으로 추출해야 합니다. JSON 형식으로만 응답하며, 다른 설명은 추가하지 마세요.
 
     가능한 액션(action) 목록:
-    - "query_stock": 현재 재고를 조회하는 요청 (예: 재고 현황, 현재 재고, 전체 재고)
-    - "query_location_items": 특정 로케이션에 있는 품목을 조회하는 요청 (예: A-01-01에 뭐가 있어?, B-02-01 제품 알려줘)
-    - "inbound": 제품을 입고하는 요청 (예: 노트북 5개 입고해 줘, 펜 100개 넣어줘)
-    - "outbound": 제품을 출고하는 요청 (예: 노트북 2개 출고해 줘, 무선 마우스 1개 판매, HDMI 케이블 100개 출하)
-    - "query_inbound_history": 입고 기록을 조회하는 요청 (예: 입고 현황, 최근 입고 기록)
-    - "query_outbound_history": 출고 기록을 조회하는 요청 (예: 출고 현황, 최근 출고 기록)
+    - "query_stock": 현재 재고를 조회하는 요청 (예: 재고 현황, 현재 재고, 전체 재고 등. 재고와 관련된 다양한 표현 포함)
+    - "query_location_items": 특정 로케이션에 있는 품목을 조회하는 요청 (예: A-01-01에 뭐가 있어?, B-02-01 제품 알려줘 등)
+    - "inbound": 제품을 입고하는 요청 (예: 노트북 5개 입고해 줘, 펜 100개 넣어줘 등)
+    - "outbound": 제품을 출고하는 요청 (예: 노트북 2개 출고해 줘, 무선 마우스 1개 판매, HDMI 케이블 100개 출하 등)
+    - "query_inbound_history": 입고 기록을 조회하는 요청 (입고와 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현 포함)
+    - "query_outbound_history": 출고 기록을 조회하는 요청 (출고와 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현 포함)
     - "unknown": 위 액션에 해당하지 않는 일반적인 질문 또는 이해할 수 없는 요청
+
+    ※ 사용자가 입고/출고/재고/로케이션 등과 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현을 사용해도, 의미에 맞는 액션으로 해석하세요.
 
     개체명(entities)은 다음과 같습니다:
     - product_name (string, 제품명): 조회/입고/출고할 제품 이름 (예: "노트북 컴퓨터", "무선 마우스")
@@ -140,47 +142,24 @@ def generate_ai_response(user_input):
     응답은 반드시 하나의 JSON 객체여야 합니다.
 
     예시:
-    사용자: 노트북 5개 입고해 줘
-    응답: {"action": "inbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 5}}
-
-    사용자: 무선 마우스 재고는?
-    응답: {"action": "query_stock", "entities": {"product_name": "무선 마우스"}}
-
-    사용자: 전체 재고 보여줘
-    응답: {"action": "query_stock", "entities": {"all_stock": true}}
-
-    사용자: A-01-01에 뭐가 있어?
-    응답: {"action": "query_location_items", "entities": {"location_code": "A-01-01"}}
-
-    사용자: B-02-01에 있는 제품 알려줘
-    응답: {"action": "query_location_items", "entities": {"location_code": "B-02-01"}}
-
-    사용자: C-03-05에 제품이 뭐야?
-    응답: {"action": "query_location_items", "entities": {"location_code": "C-03-05"}}
-
-    사용자: 노트북 2개 출고해 줘
-    응답: {"action": "outbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 2}}
-
-    사용자: 무선 마우스 1개 판매
-    응답: {"action": "outbound", "entities": {"product_name": "무선 마우스", "quantity": 1}}
-
-    사용자: HDMI 케이블 100개 출하
-    응답: {"action": "outbound", "entities": {"product_name": "HDMI 케이블", "quantity": 100}}
-
     사용자: 입고 현황 알려줘
     응답: {"action": "query_inbound_history", "entities": {"limit": 5}}
-
-    사용자: 최근 출고 기록 10개
-    응답: {"action": "query_outbound_history", "entities": {"limit": 10}}
-
+    사용자: 입고 내역 보여줘
+    응답: {"action": "query_inbound_history", "entities": {}}
+    사용자: 출고 현황 알려줘
+    응답: {"action": "query_outbound_history", "entities": {"limit": 5}}
+    사용자: 출고 내역 보여줘
+    응답: {"action": "query_outbound_history", "entities": {}}
+    사용자: 노트북 5개 입고해 줘
+    응답: {"action": "inbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 5}}
+    사용자: 무선 마우스 재고는?
+    응답: {"action": "query_stock", "entities": {"product_name": "무선 마우스"}}
+    사용자: 전체 재고 보여줘
+    응답: {"action": "query_stock", "entities": {"all_stock": true}}
+    사용자: A-01-01에 뭐가 있어?
+    응답: {"action": "query_location_items", "entities": {"location_code": "A-01-01"}}
     사용자: 안녕하세요
     응답: {"action": "unknown", "entities": {}}
-
-    사용자: 재고 없는 제품 찾아줘
-    응답: {"action": "query_stock", "entities": {"quantity": 0}}
-
-    사용자: {user_input}
-    응답:
     """
 
     # Gemma 모델을 사용하여 사용자 입력 분석
@@ -202,6 +181,19 @@ def generate_ai_response(user_input):
         action = parsed_intent.get('action')
         entities = parsed_intent.get('entities', {})
         print(f"1단계 파싱 성공: 액션: {action}, 개체명: {entities}") # 디버깅
+        # 1단계 파싱 성공 후 후처리: '입고'와 '현황/내역/목록/리스트/이력'이 함께 있으면 query_inbound_history로 강제 변환
+        # (띄어쓰기/붙여쓰기 모두 허용)
+        norm_input = re.sub(r"\s+", "", user_input)  # 모든 공백 제거
+        if action == "query_stock":
+            if (
+                re.search(r"입고.*(현황|내역|목록|리스트|이력)", user_input)
+                or re.search(r"(현황|내역|목록|리스트|이력).*입고", user_input)
+                or re.search(r"입고(현황|내역|목록|리스트|이력)", norm_input)
+                or re.search(r"(현황|내역|목록|리스트|이력)입고", norm_input)
+            ):
+                action = "query_inbound_history"
+                entities = {k: v for k, v in entities.items() if k != "all_stock"}
+                print(f"후처리: '입고' + '현황/내역/목록/리스트/이력' 조합(띄어쓰기/붙여쓰기 무관) → query_inbound_history로 강제 변환")
         return _process_parsed_intent(action, entities)
     except (json.JSONDecodeError, ValueError) as e1: # Json5DecodeError 제거
         print(f"1단계 파싱 실패: {e1}. 2단계 클리닝 시도.")
@@ -234,7 +226,7 @@ def generate_ai_response(user_input):
                 print(f"2단계 파싱 실패: JSON 객체를 찾을 수 없습니다. 원시 응답: {ai_json_response_raw}")
                 action = "unknown"
                 entities = {}
-        except (json.JSONDecodeError, ValueError, json5.json5.Json5DecodeError) as e2: # 2단계 파싱 실패
+        except (json.JSONDecodeError, ValueError) as e2: # 2단계 파싱 실패 (Json5DecodeError 제거)
             print(f"2단계 파싱도 실패: {e2}. 최종 unknown 처리.")
             action = "unknown"
             entities = {}
