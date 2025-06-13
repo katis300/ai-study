@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+
+{% block title %}재고 현황 - AI WMS{% endblock %}
+
+{% block content %}
+    <style>
+        .page-header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        .filter-form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+            margin: 20px auto;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .filter-form input[type="text"],
+        .filter-form button {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .filter-form input[type="text"] {
+            flex-grow: 1;
+        }
+        .filter-form button {
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        .filter-form button:hover {
+            background-color: #0056b3;
+        }
+        .stock-table-container {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin: 20px auto;
+            max-width: 800px;
+            overflow-x: auto; /* 테이블 내용이 넘칠 경우 스크롤바 */
+        }
+        .stock-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .stock-table th, .stock-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        .stock-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+
+    <h2 class="page-header">재고 현황</h2>
+
+    <div class="filter-form">
+        <input type="text" id="product_name_filter" placeholder="제품명으로 검색...">
+        <button id="search_button">검색</button>
+        <button id="reset_button">전체 보기</button>
+    </div>
+
+    <div class="stock-table-container">
+        <table class="stock-table" id="stock_data_table">
+            <thead>
+                <tr>
+                    <th>제품명</th>
+                    <th>총 수량</th>
+                    <th>보관 로케이션</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% if current_stocks %}
+                    {% for item in current_stocks %}
+                    <tr>
+                        <td>{{ item[0] }}</td>
+                        <td>{{ item[1] }}</td>
+                        <td>{{ item[2] }}</td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr><td colspan="3" class="no-data">현재 재고 정보가 없습니다.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function fetchStockData(productName = '') {
+            const response = await fetch('/get_stock_data?product_name=' + encodeURIComponent(productName));
+            const data = await response.json();
+            
+            const tableBody = document.querySelector('#stock_data_table tbody');
+            tableBody.innerHTML = ''; // 기존 내용 지우기
+
+            if (data.stocks && data.stocks.length > 0) {
+                data.stocks.forEach(item => {
+                    const row = `<tr><td>${item[0]}</td><td>${item[1]}</td><td>${item[2]}</td></tr>`;
+                    tableBody.insertAdjacentHTML('beforeend', row);
+                });
+            } else {
+                tableBody.insertAdjacentHTML('beforeend', '<tr><td colspan="3" class="no-data">해당하는 재고 정보가 없습니다.</td></tr>');
+            }
+        }
+
+        document.getElementById('search_button').addEventListener('click', function() {
+            const productName = document.getElementById('product_name_filter').value;
+            fetchStockData(productName);
+        });
+
+        document.getElementById('reset_button').addEventListener('click', function() {
+            document.getElementById('product_name_filter').value = ''; // 입력창 비우기
+            fetchStockData(''); // 전체 재고 다시 불러오기
+        });
+
+        // 초기 로드 시 재고 데이터 불러오기 (dashboard에서 이미 불러오지만, 직접 접근 시)
+        window.addEventListener('load', () => fetchStockData('')); // 이미 Jinja2로 초기 데이터가 있으므로 주석 처리
+    </script>
+{% endblock %}

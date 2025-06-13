@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}AI WMS 시스템{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #4CAF50; /* 기본 녹색 */
+            --primary-hover-color: #45a049; /* 기본 녹색 호버 */
+            --secondary-color: #007bff; /* 파란색 */
+            --secondary-hover-color: #0056b3; /* 파란색 호버 */
+            --background-color: #f4f4f4;
+            --card-background-color: #ffffff;
+            --text-color: #333;
+            --border-color: #ddd;
+            --shadow-light: 0 2px 10px rgba(0,0,0,0.1);
+            --success-bg: #d4edda;
+            --success-text: #155724;
+            --success-border: #c3e6cb;
+            --danger-bg: #f8d7da;
+            --danger-text: #721c24;
+            --danger-border: #f5c6cb;
+            --info-bg: #d1ecf1;
+            --info-text: #0c5460;
+            --info-border: #bee5eb;
+        }
+
+        body { 
+            font-family: 'Noto Sans KR', sans-serif; 
+            margin: 0; 
+            padding: 0; 
+            background-color: var(--background-color); 
+            display: flex; 
+            flex-direction: column; 
+            min-height: 100vh; 
+            color: var(--text-color);
+        }
+        .navbar { 
+            background-color: var(--primary-color); 
+            overflow: hidden; 
+            padding: 10px 20px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+            box-shadow: var(--shadow-light);
+        }
+        .navbar a { 
+            float: left; 
+            display: block; 
+            color: white; 
+            text-align: center; 
+            padding: 14px 16px; 
+            text-decoration: none; 
+            transition: background-color 0.3s ease;
+            border-radius: 5px;
+        }
+        .navbar a:hover { 
+            background-color: var(--primary-hover-color); 
+            color: white; /* 호버 시 텍스트 색상 유지 */
+        }
+        .navbar a.active { /* 활성화된 메뉴 강조 */
+            background-color: var(--primary-hover-color);
+            font-weight: bold;
+        }
+        .navbar .logo { 
+            font-size: 1.5em; 
+            font-weight: bold; 
+        }
+        .navbar .logo a {
+            background-color: transparent; /* 로고 링크는 호버 스타일 적용 안 함 */
+            padding: 0;
+            margin: 0;
+        }
+        .navbar .logo a:hover {
+            background-color: transparent;
+        }
+        .navbar .nav-links { 
+            display: flex; 
+        }
+        .navbar .user-info { 
+            color: white; 
+            margin-left: auto; 
+            padding-right: 10px; 
+            font-size: 0.9em;
+        }
+        .user-info a {
+            color: white;
+            margin-left: 10px;
+            padding: 5px 10px;
+            border: 1px solid rgba(255,255,255,0.3);
+            border-radius: 5px;
+        }
+        .user-info a:hover {
+            background-color: rgba(255,255,255,0.2);
+        }
+        
+        /* Flash 메시지 스타일 */
+        .flash-messages { 
+            list-style: none; 
+            padding: 10px; 
+            margin-bottom: 20px; 
+            border-radius: 5px; 
+            margin-left: auto; 
+            margin-right: auto; 
+            max-width: 800px; /* 대시보드 너비와 유사하게 조정 */
+        }
+        .flash-messages li { 
+            padding: 8px 15px; 
+            margin-bottom: 10px; 
+            border-radius: 4px; 
+            font-size: 0.9em; 
+        }
+        .flash-messages li.success { 
+            background-color: var(--success-bg); 
+            color: var(--success-text); 
+            border: 1px solid var(--success-border); 
+        }
+        .flash-messages li.danger { 
+            background-color: var(--danger-bg); 
+            color: var(--danger-text); 
+            border: 1px solid var(--danger-border); 
+        }
+        .flash-messages li.info { 
+            background-color: var(--info-bg); 
+            color: var(--info-text); 
+            border: 1px solid var(--info-border); 
+        }
+
+        .content { 
+            flex: 1; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; /* 자식 요소들을 세로로 정렬 */
+        }
+        .footer { 
+            background-color: #333; 
+            color: white; 
+            text-align: center; 
+            padding: 10px; 
+            font-size: 0.8em; 
+            margin-top: auto; /* 푸터를 하단으로 밀어냄 */
+        }
+
+        /* 공통 카드 스타일 */
+        .card {
+            background-color: var(--card-background-color);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: var(--shadow-light);
+            margin-bottom: 20px; /* 카드 아래 여백 */
+        }
+        .card h3 {
+            color: var(--text-color);
+            margin-top: 0;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+        }
+        .card table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .card th, .card td {
+            border: 1px solid var(--border-color);
+            padding: 10px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .card th {
+            background-color: var(--background-color);
+            font-weight: bold;
+        }
+        .card tbody tr:nth-child(even) { /* 짝수 행 배경색 */
+            background-color: #f9f9f9;
+        }
+        .card tbody tr:hover { /* 행 호버 효과 */
+            background-color: #f1f1f1;
+        }
+        .no-data {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+
+        /* 폼 요소 기본 스타일 */
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        select {
+            width: calc(100% - 22px);
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            box-sizing: border-box; /* 패딩이 너비에 포함되도록 */
+            font-size: 1em;
+        }
+        button[type="submit"],
+        .button { /* 버튼 공통 스타일 */
+            padding: 10px 15px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease;
+        }
+        button[type="submit"]:hover,
+        .button:hover {
+            background-color: var(--primary-hover-color);
+        }
+        /* 다른 버튼 색상 예시 */
+        .button-secondary {
+            background-color: var(--secondary-color);
+        }
+        .button-secondary:hover {
+            background-color: var(--secondary-hover-color);
+        }
+
+    </style>
+</head>
+<body>
+    <div class="navbar">
+        <div class="logo"><a href="{{ url_for('dashboard') }}">AI WMS</a></div>
+        <div class="nav-links">
+            <a href="{{ url_for('dashboard') }}" class="{% if request.path == url_for('dashboard') %}active{% endif %}">대시보드</a>
+            <a href="{{ url_for('chat_ai_page') }}" class="{% if request.path == url_for('chat_ai_page') %}active{% endif %}">AI 비서</a>
+            
+            {# 역할별 메뉴 표시 시작 #}
+            {% if 'role' in session %}
+                {% if session.get('role') == 'admin' %}
+                    <a href="{{ url_for('admin_page') }}" class="{% if request.path == url_for('admin_page') %}active{% endif %}">관리자 페이지</a>
+                {% endif %}
+
+                {% if session.get('role') == 'inbound_manager' or session.get('role') == 'admin' or session.get('role') == 'all_manager' %}
+                    <a href="{{ url_for('inbound_page') }}" class="{% if request.path == url_for('inbound_page') %}active{% endif %}">입고 관리</a>
+                {% endif %}
+
+                {% if session.get('role') == 'outbound_manager' or session.get('role') == 'admin' or session.get('role') == 'all_manager' %}
+                    <a href="{{ url_for('outbound_page') }}" class="{% if request.path == url_for('outbound_page') %}active{% endif %}">출고 관리</a>
+                {% endif %}
+                
+                {% if session.get('role') == 'inventory_manager' or session.get('role') == 'admin' or session.get('role') == 'all_manager' %}
+                    <a href="{{ url_for('inventory_page') }}" class="{% if request.path == url_for('inventory_page') %}active{% endif %}">재고 현황</a>
+                {% endif %}
+            {% endif %}
+            {# 역할별 메뉴 표시 끝 #}
+        </div>
+        <div class="user-info">
+            {% if 'username' in session %}
+                환영합니다, {{ session['username'] }}님! ({{ session['role'] if session.get('role') else '역할 없음'}}) <a href="{{ url_for('logout') }}">로그아웃</a>
+            {% else %}
+                <a href="{{ url_for('login') }}">로그인</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="content">
+        {# Flask flash messages를 표시하는 부분 #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <ul class="flash-messages">
+            {% for category, message in messages %}
+              <li class="{{ category }}">{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <div class="footer">
+        &copy; 2025 AI WMS 시스템. 모든 권리 보유.
+    </div>
+
+    <script>
+        // 현재 URL 경로와 메뉴 링크를 비교하여 활성화된 메뉴 강조
+        document.addEventListener('DOMContentLoaded', () => {
+            const navLinks = document.querySelectorAll('.navbar .nav-links a');
+            navLinks.forEach(link => {
+                // Flask의 url_for로 생성된 경로를 비교 (쿼리 파라미터 제외)
+                const currentPath = window.location.pathname;
+                const linkPath = new URL(link.href).pathname;
+
+                if (currentPath === linkPath) {
+                    link.classList.add('active');
+                } else {
+                    link.classList.remove('active');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
