@@ -4,106 +4,112 @@
 
 {% block content %}
 <style>
-    /* 기존 index.html의 스타일 대부분 유지 */
     .chat-container {
-        background-color: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        background-color: var(--card-background-color);
+        border-radius: 12px;
+        box-shadow: var(--shadow-light);
         width: 100%;
-        max-width: 600px;
-        /* 최대 너비 설정 */
+        max-width: 900px; /* 채팅창 최대 너비 확대: 600px -> 900px */
         display: flex;
         flex-direction: column;
-        height: 70vh;
-        /* 화면 높이의 70% 차지 */
+        height: 85vh; /* 화면 높이 확대: 70vh -> 85vh */
         overflow: hidden;
         margin: 20px auto;
-        /* 상하 20px 마진, 좌우 자동 마진으로 중앙 정렬 */
     }
 
     .chat-header {
-        background-color: #4CAF50;
+        background-color: var(--primary-color);
         color: white;
-        padding: 15px;
-        border-top-left-radius: 8px;
-        border-top-right-radius: 8px;
+        padding: 18px;
+        border-top-left-radius: 12px;
+        border-top-right-radius: 12px;
         text-align: center;
-        font-size: 1.2em;
+        font-size: 1.5em;
+        font-weight: bold;
     }
 
     .chat-messages {
         flex-grow: 1;
-        /* 남은 공간을 모두 차지 */
-        padding: 15px;
+        padding: 20px;
         overflow-y: auto;
-        /* 내용이 넘치면 스크롤바 생성 */
-        background-color: #e9e9e9;
+        background-color: var(--background-color);
         display: flex;
-        /* 메시지 정렬을 위해 flex 사용 */
         flex-direction: column;
-        /* 메시지를 세로로 쌓음 */
+        gap: 15px;
     }
 
     .message-box {
-        margin-bottom: 10px;
-        padding: 8px 12px;
-        border-radius: 5px;
-        max-width: 80%;
-        /* 메시지 최대 너비 */
+        margin-bottom: 5px;
+        padding: 12px 18px;
+        border-radius: 18px;
+        max-width: 85%;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        line-height: 1.5;
     }
 
     .user-message {
         background-color: #DCF8C6;
-        /* 사용자 메시지 배경색 */
         align-self: flex-end;
-        /* 오른쪽 정렬 */
         margin-left: auto;
-        /* 왼쪽 자동 마진으로 오른쪽으로 밀어냄 */
-        text-align: right;
+        text-align: left;
+        border-bottom-right-radius: 5px;
     }
 
     .ai-message {
-        background-color: #fff;
-        /* AI 메시지 배경색 */
+        background-color: var(--card-background-color);
         align-self: flex-start;
-        /* 왼쪽 정렬 */
         text-align: left;
+        border-bottom-left-radius: 5px;
     }
 
     .chat-input-container {
         display: flex;
-        padding: 15px;
-        border-top: 1px solid #ddd;
-        background-color: #f9f9f9;
+        padding: 18px;
+        border-top: 1px solid var(--border-color);
+        background-color: var(--card-background-color);
     }
 
     .chat-input {
         flex-grow: 1;
-        /* 입력창이 남은 공간을 모두 차지 */
-        padding: 10px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-        font-size: 1em;
+        padding: 12px;
+        border: 1px solid var(--border-color);
+        border-radius: 25px;
+        font-size: 1.1em;
+        transition: border-color 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .chat-input:focus {
+        border-color: var(--secondary-color);
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+        outline: none;
     }
 
     .send-button {
-        background-color: #4CAF50;
+        background-color: var(--primary-color);
         color: white;
         border: none;
-        padding: 10px 15px;
-        border-radius: 5px;
-        margin-left: 10px;
+        padding: 12px 25px;
+        border-radius: 25px;
+        margin-left: 15px;
         cursor: pointer;
-        font-size: 1em;
+        font-size: 1.1em;
+        font-weight: 600;
+        transition: background-color 0.3s ease, transform 0.2s ease;
+        white-space: nowrap; /* 한 줄로 표시 */
+        width: auto;
+        height: auto;
+        min-width: 80px;
+        min-height: 40px;
     }
 
     .send-button:hover {
-        background-color: #45a049;
+        background-color: var(--primary-hover-color);
+        transform: translateY(-2px);
     }
 </style>
 <div class="chat-container">
     <div class="chat-header">
-        AI WMS 비서 🤖
+        AI WMS
     </div>
     <div class="chat-messages" id="chat-messages">
         <div class="message-box ai-message">안녕하세요! AI WMS 비서입니다. 무엇을 도와드릴까요?</div>
@@ -119,7 +125,6 @@
     const userInput = document.getElementById('user-input');
     const sendButton = document.getElementById('send-button');
 
-    // 메시지를 채팅창에 추가하는 함수
     function addMessage(text, sender) {
         const messageDiv = document.createElement('div');
         messageDiv.classList.add('message-box');
@@ -129,15 +134,13 @@
         chatMessages.scrollTop = chatMessages.scrollHeight; // 스크롤을 항상 아래로
     }
 
-    // 메시지 전송 처리
     async function sendMessage() {
         const message = userInput.value.trim();
-        if (message === '') return; // 빈 메시지는 전송 안 함
+        if (message === '') return;
 
-        addMessage(message, 'user'); // 사용자 메시지를 채팅창에 추가
-        userInput.value = ''; // 입력창 비우기
+        addMessage(message, 'user');
+        userInput.value = '';
 
-        // AI에게 메시지 전송
         try {
             const response = await fetch('/chat', {
                 method: 'POST',
@@ -147,17 +150,15 @@
                 body: JSON.stringify({ message: message })
             });
             const data = await response.json();
-            addMessage(data.response, 'ai'); // AI 응답을 채팅창에 추가
+            addMessage(data.response, 'ai');
         } catch (error) {
             console.error('Error sending message:', error);
             addMessage('죄송합니다. 메시지를 처리하는 데 문제가 발생했습니다.', 'ai');
         }
     }
 
-    // 전송 버튼 클릭 시
     sendButton.addEventListener('click', sendMessage);
 
-    // Enter 키 입력 시
     userInput.addEventListener('keypress', (event) => {
         if (event.key === 'Enter') {
             sendMessage();
