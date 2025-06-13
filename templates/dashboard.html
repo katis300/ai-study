@@ -4,33 +4,39 @@
 
 {% block content %}
     <style>
+        .page-header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: var(--text-color);
+            font-size: 2em;
+            font-weight: bold;
+        }
         .dashboard-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
             gap: 20px;
         }
-        .card {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        .card h3 {
-            color: #333;
-            margin-top: 0;
-            margin-bottom: 15px;
-        }
+        /* card 스타일은 base.html에서 공통으로 정의됨 */
         .card table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 10px;
         }
         .card th, .card td {
-            border: 1px solid #ddd;
-            padding: 8px;
+            border: 1px solid var(--border-color);
+            padding: 10px;
             text-align: left;
+            font-size: 0.9em;
         }
         .card th {
-            background-color: #f2f2f2;
+            background-color: var(--background-color);
+            font-weight: bold;
+        }
+        .card tbody tr:nth-child(even) { /* 짝수 행 배경색 */
+            background-color: #f9f9f9;
+        }
+        .card tbody tr:hover { /* 행 호버 효과 */
+            background-color: #f1f1f1;
         }
         .no-data {
             text-align: center;
@@ -39,7 +45,7 @@
         }
     </style>
 
-    <h2>대시보드</h2>
+    <h2 class="page-header">대시보드</h2>
 
     <div class="dashboard-grid">
         <div class="card">
@@ -62,7 +68,7 @@
                         </tr>
                         {% endfor %}
                     {% else %}
-                        <tr><td colspan="3">현재 재고 정보가 없습니다.</td></tr>
+                        <tr><td colspan="3" class="no-data">현재 재고 정보가 없습니다.</td></tr>
                     {% endif %}
                 </tbody>
             </table>
@@ -90,7 +96,7 @@
                         </tr>
                         {% endfor %}
                     {% else %}
-                        <tr><td colspan="4">최신 입고 기록이 없습니다.</td></tr>
+                        <tr><td colspan="4" class="no-data">최신 입고 기록이 없습니다.</td></tr>
                     {% endif %}
                 </tbody>
             </table>
@@ -118,7 +124,7 @@
                         </tr>
                         {% endfor %}
                     {% else %}
-                        <tr><td colspan="4">최신 출고 기록이 없습니다.</td></tr>
+                        <tr><td colspan="4" class="no-data">최신 출고 기록이 없습니다.</td></tr>
                     {% endif %}
                 </tbody>
             </table>

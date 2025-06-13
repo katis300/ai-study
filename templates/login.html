@@ -3,59 +3,78 @@
 {% block title %}로그인 - AI WMS{% endblock %}
 
 {% block content %}
-<style>
-    .login-container {
-        width: 300px;
-        margin: 50px auto;
-        padding: 20px;
-        background-color: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        text-align: center;
-    }
-
-    .login-container h2 {
-        margin-bottom: 20px;
-        color: #333;
-    }
-
-    .login-container input[type="text"],
-    .login-container input[type="password"] {
-        width: calc(100% - 22px);
-        padding: 10px;
-        margin-bottom: 15px;
-        border: 1px solid #ddd;
-        border-radius: 5px;
-    }
-
-    .login-container button {
-        width: 100%;
-        padding: 10px;
-        background-color: #4CAF50;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        font-size: 1.1em;
-    }
-
-    .login-container button:hover {
-        background-color: #45a049;
-    }
-
-    .flash-message {
-        color: red;
-        margin-top: 10px;
-    }
-</style>
-<div class="login-container">
-    <h2>AI WMS 로그인</h2>
-    <form action="{{ url_for('login_post') }}" method="POST">
-        <input type="text" name="username" placeholder="사용자 ID" required>
-        <input type="password" name="password" placeholder="비밀번호" required>
-        <button type="submit">로그인</button>
-    </form>
-    <div class="flash-message">
-    </div>
-</div>
+    <style>
+        body { /* 로그인 페이지 중앙 정렬을 위해 body flex 속성 재정의 */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: var(--background-color);
+        }
+        .navbar, .footer { /* 로그인 페이지에서는 헤더/푸터 숨김 */
+            display: none;
+        }
+        .login-container {
+            width: 100%;
+            max-width: 400px;
+            padding: 40px; /* 패딩 증가 */
+            background-color: var(--card-background-color);
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.15); /* 그림자 강조 */
+            text-align: center;
+            box-sizing: border-box; /* 패딩이 너비에 포함되도록 */
+        }
+        .login-container h2 {
+            margin-bottom: 30px; /* 마진 증가 */
+            color: var(--primary-color);
+            font-size: 2.2em; /* 폰트 크기 증가 */
+            font-weight: 700; /* 폰트 굵기 */
+        }
+        .login-container input[type="text"],
+        .login-container input[type="password"] {
+            width: calc(100% - 24px); /* 패딩 및 보더 고려 */
+            padding: 14px; /* 패딩 증가 */
+            margin-bottom: 20px; /* 마진 증가 */
+            border: 1px solid var(--border-color);
+            border-radius: 8px; /* 모서리 둥글게 */
+            font-size: 1.1em;
+            box-sizing: border-box;
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+        .login-container input[type="text"]:focus,
+        .login-container input[type="password"]:focus {
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* 포커스 시 그림자 효과 */
+            outline: none; /* 기본 아웃라인 제거 */
+        }
+        .login-container button {
+            width: 100%;
+            padding: 15px; /* 패딩 증가 */
+            background-color: var(--primary-color); /* 통일된 기본 색상 */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.3em;
+            font-weight: 600; /* 폰트 굵기 */
+            transition: background-color 0.3s ease, transform 0.2s ease;
+        }
+        .login-container button:hover {
+            background-color: var(--primary-hover-color);
+            transform: translateY(-2px); /* 약간 위로 뜨는 효과 */
+        }
+        .flash-message { /* 이 스타일은 base.html에도 정의되어 있으므로 중복될 수 있습니다. */
+            margin-top: 20px;
+            font-size: 0.95em;
+            font-weight: 500;
+        }
+    </style>
+    <div class="login-container">
+        <h2>AI WMS 로그인</h2>
+        <form action="{{ url_for('login_post') }}" method="POST">
+            <input type="text" name="username" placeholder="사용자 ID" required>
+            <input type="password" name="password" placeholder="비밀번호" required>
+            <button type="submit">로그인</button>
+        </form>
+        </div>
 {% endblock %}

@@ -122,10 +122,12 @@ def generate_ai_response(user_input):
     당신은 창고 관리 시스템(WMS)의 AI 비서입니다. 사용자의 질문을 분석하여 요청하는 '액션(action)'과 '개체명(entities)'을 JSON 형식으로 추출해야 합니다. JSON 형식으로만 응답하며, 다른 설명은 추가하지 마세요.
 
     가능한 액션(action) 목록:
-    - "query_stock": 재고를 조회하는 요청 (예: 재고 현황, 현재 재고, 전체 재고)
+    - "query_stock": 현재 재고를 조회하는 요청 (예: 재고 현황, 현재 재고, 전체 재고)
     - "query_location_items": 특정 로케이션에 있는 품목을 조회하는 요청 (예: A-01-01에 뭐가 있어?, B-02-01 제품 알려줘)
     - "inbound": 제품을 입고하는 요청 (예: 노트북 5개 입고해 줘, 펜 100개 넣어줘)
     - "outbound": 제품을 출고하는 요청 (예: 노트북 2개 출고해 줘, 무선 마우스 1개 판매, HDMI 케이블 100개 출하)
+    - "query_inbound_history": 입고 기록을 조회하는 요청 (예: 입고 현황, 최근 입고 기록)
+    - "query_outbound_history": 출고 기록을 조회하는 요청 (예: 출고 현황, 최근 출고 기록)
     - "unknown": 위 액션에 해당하지 않는 일반적인 질문 또는 이해할 수 없는 요청
 
     개체명(entities)은 다음과 같습니다:
@@ -133,6 +135,7 @@ def generate_ai_response(user_input):
     - quantity (integer, 수량): 입고/출고할 제품의 수량 (숫자)
     - location_code (string, 로케이션 코드): 로케이션의 고유 코드 (예: "A-01-01", "B-02-01")
     - all_stock (boolean, 전체 재고): 전체 재고를 요청하는 경우 (true)
+    - limit (integer, 개수 제한): 기록 조회 시 보여줄 최대 개수 (예: 5개, 10개)
 
     응답은 반드시 하나의 JSON 객체여야 합니다.
 
@@ -164,27 +167,17 @@ def generate_ai_response(user_input):
     사용자: HDMI 케이블 100개 출하
     응답: {"action": "outbound", "entities": {"product_name": "HDMI 케이블", "quantity": 100}}
 
+    사용자: 입고 현황 알려줘
+    응답: {"action": "query_inbound_history", "entities": {"limit": 5}}
+
+    사용자: 최근 출고 기록 10개
+    응답: {"action": "query_outbound_history", "entities": {"limit": 10}}
+
     사용자: 안녕하세요
     응답: {"action": "unknown", "entities": {}}
 
     사용자: 재고 없는 제품 찾아줘
     응답: {"action": "query_stock", "entities": {"quantity": 0}}
-
-    # 추가/수정된 예시: 의도 파악 정확도 향상 및 JSON 반환 안정화
-    사용자: 입고 현황
-    응답: {"action": "query_stock", "entities": {"all_stock": true}} 
-
-    사용자: 출고 현황
-    응답: {"action": "query_stock", "entities": {"all_stock": true}}
-
-    사용자: 노트북 10대 입고 해줘
-    응답: {"action": "inbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 10}}
-
-    사용자: 노트북 10대 출고 해줘
-    응답: {"action": "outbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 10}}
-    
-    사용자: 이거 뭐야?
-    응답: {"action": "unknown", "entities": {}}
 
     사용자: {user_input}
     응답:
@@ -200,50 +193,71 @@ def generate_ai_response(user_input):
     ai_json_response_raw = generated_text.replace(full_prompt, "").strip()
     print(f"Gemma 모델의 JSON 원시 응답: {ai_json_response_raw}") # 디버깅을 위해 출력
 
-    # JSON 파싱 시도 (json5 라이브러리 활용)
+    # JSON 파싱 시도 (2단계 파싱 구조)
     parsed_intent = {"action": "unknown", "entities": {}} # 초기값 설정
+    
     try:
-        # 1차: 원시 응답을 바로 파싱 시도
+        # 1단계 파싱 시도: 원시 응답을 직접 json5로 로드 (대부분의 경우 성공 기대)
+        parsed_intent = json5.loads(ai_json_response_raw)
+        action = parsed_intent.get('action')
+        entities = parsed_intent.get('entities', {})
+        print(f"1단계 파싱 성공: 액션: {action}, 개체명: {entities}") # 디버깅
+        return _process_parsed_intent(action, entities)
+    except (json.JSONDecodeError, ValueError) as e1: # Json5DecodeError 제거
+        print(f"1단계 파싱 실패: {e1}. 2단계 클리닝 시도.")
+        
+        # 2단계 파싱 시도: 강력한 클리닝 후 json5로 로드
         try:
-            parsed_intent = json5.loads(ai_json_response_raw)
-            action = parsed_intent.get('action')
-            entities = parsed_intent.get('entities', {})
-            print(f"파싱된 액션: {action}, 개체명: {entities}") # 디버깅
-        except Exception as e1:
-            # 2차: 클리닝 및 정규식 추출 후 파싱 시도
             clean_json_str = ai_json_response_raw.strip().replace('```json', '').replace('```', '').strip()
-            clean_json_str = re.sub(r'[^\w\s\uAC00-\uD7A3\{\}\[\]:,."_\-]', '', clean_json_str)
-            json_match = re.search(r'\{.*?\}', clean_json_str, re.DOTALL)
+            
+            # 모든 비인쇄 문자 및 숨겨진 유니코드 공백 문자 제거 (정규표현식 변경)
+            # 유니코드 카테고리를 사용하는 정규표현식은 호환성 문제가 있을 수 있으므로, 
+            # 직접 허용되는 문자를 정의하고 나머지를 제거하는 방식으로 변경
+            # 한글 유니코드 범위: \uAC00-\uD7A3
+            # \w: 알파벳, 숫자, 언더스코어 (단어 문자)
+            # \s: 공백 문자 (탭, 줄바꿈 포함)
+            # { } [ ] : , . " - : JSON 구조에 필요한 특수 문자
+            # 즉, 단어 문자, 공백, 한글, 그리고 JSON 구조에 필요한 특수 문자만 남깁니다.
+            clean_json_str = re.sub(r'[^\w\s\uAC00-\uD7A3\{\}\[\]:,."_\-]', '', clean_json_str) 
+
+            # JSON 객체 시작 '{'부터 끝 '}'까지 비탐욕적으로 찾음
+            json_match = re.search(r'\{.*?\}', clean_json_str, re.DOTALL) 
+            
             if json_match:
                 json_string = json_match.group(0)
-                parsed_intent = json5.loads(json_string)
+                parsed_intent = json5.loads(json_string) # json5를 사용하여 파싱
                 action = parsed_intent.get('action')
                 entities = parsed_intent.get('entities', {})
-                print(f"파싱된 액션(클리닝): {action}, 개체명: {entities}") # 디버깅
+                print(f"2단계 파싱 성공 (클리닝): 액션: {action}, 개체명: {entities}") # 디버깅
+                return _process_parsed_intent(action, entities)
             else:
-                print(f"JSON 객체를 찾을 수 없습니다. 원시 응답: {ai_json_response_raw}")
+                print(f"2단계 파싱 실패: JSON 객체를 찾을 수 없습니다. 원시 응답: {ai_json_response_raw}")
                 action = "unknown"
                 entities = {}
-    except (json.JSONDecodeError, ValueError) as e: # ValueError도 포함
-        print(f"JSON 파싱 오류: {e}. 원시 응답: {ai_json_response_raw}")
-        action = "unknown"
-        entities = {}
-    except Exception as e:
-        print(f"응답 처리 중 예기치 않은 오류: {e}")
-        action = "unknown"
-        entities = {}
+        except (json.JSONDecodeError, ValueError, json5.json5.Json5DecodeError) as e2: # 2단계 파싱 실패
+            print(f"2단계 파싱도 실패: {e2}. 최종 unknown 처리.")
+            action = "unknown"
+            entities = {}
+        except Exception as e3:
+            print(f"응답 처리 중 예기치 않은 예외 오류: {e3}")
+            action = "unknown"
+            entities = {}
+    
+    # 모든 파싱 시도 실패 시 최종 unknown 처리 (이 부분이 실행될 일은 거의 없어야 함)
+    return _process_parsed_intent(parsed_intent.get('action', 'unknown'), parsed_intent.get('entities', {}))
 
-    # --- 파싱된 의도와 개체명을 바탕으로 WMS 기능 실행 ---
 
+# --- 파싱된 의도와 개체명을 바탕으로 WMS 기능 실행 (헬퍼 함수로 분리) ---
+def _process_parsed_intent(action, entities):
     # 역할 기반 명령 권한 확인
     current_user_role = session.get('role')
     
     role_permissions = {
-        'admin': ['query_stock', 'query_location_items', 'inbound', 'outbound', 'unknown'],
-        'inbound_manager': ['inbound', 'query_stock', 'query_location_items', 'unknown'],
-        'outbound_manager': ['outbound', 'query_stock', 'query_location_items', 'unknown'],
-        'inventory_manager': ['query_stock', 'query_location_items', 'unknown'],
-        'all_manager': ['inbound', 'outbound', 'query_stock', 'query_location_items', 'unknown'],
+        'admin': ['query_stock', 'query_location_items', 'inbound', 'outbound', 'query_inbound_history', 'query_outbound_history', 'unknown'], # 새로운 액션 추가
+        'inbound_manager': ['inbound', 'query_stock', 'query_location_items', 'query_inbound_history', 'unknown'], # 새로운 액션 추가
+        'outbound_manager': ['outbound', 'query_stock', 'query_location_items', 'query_outbound_history', 'unknown'], # 새로운 액션 추가
+        'inventory_manager': ['query_stock', 'query_location_items', 'query_inbound_history', 'query_outbound_history', 'unknown'], # 새로운 액션 추가
+        'all_manager': ['inbound', 'outbound', 'query_stock', 'query_location_items', 'query_inbound_history', 'query_outbound_history', 'unknown'], # 새로운 액션 추가
         'default': ['unknown'] 
     }
 
@@ -301,14 +315,14 @@ def generate_ai_response(user_input):
     elif action == "inbound":
         product_name = entities.get('product_name')
         quantity = entities.get('quantity')
-        location_code = entities.get('location_code') # 입고 시 로케이션도 함께 받도록 확장
+        location_code = entities.get('location_code') 
 
         if product_name and quantity is not None:
             product_info = database_manager.get_product_id(product_name)
             if product_info:
                 product_id, actual_product_name = product_info[0], product_info[1]
 
-                if location_code: # 로케이션 코드가 JSON에 포함된 경우 바로 처리
+                if location_code: 
                     location_info = database_manager.get_location_id(location_code)
                     if location_info:
                         location_id, actual_location_code = location_info[0], location_info[1]
@@ -322,7 +336,7 @@ def generate_ai_response(user_input):
                         current_conversation_state['quantity'] = quantity
                         current_conversation_state['product_name'] = actual_product_name
                         return f"죄송합니다. '{location_code}'이라는 로케이션을 찾을 수 없습니다. '{actual_product_name}' {quantity}개를 입고 처리하겠습니다. 어느 로케이션에 보관하시겠습니까? (예: A-01-01)"
-                else: # 로케이션 코드가 JSON에 없는 경우, 사용자에게 물어봄 (기존 다단계 대화)
+                else: 
                     current_conversation_state['action'] = 'awaiting_location'
                     current_conversation_state['product_id'] = product_id
                     current_conversation_state['quantity'] = quantity
@@ -374,6 +388,30 @@ def generate_ai_response(user_input):
         else:
             return "어떤 제품을 몇 개 출고하시겠습니까? (예: 노트북 2개)"
     
+    elif action == "query_inbound_history": # 새로운 액션 처리
+        limit = entities.get('limit', 5) # 기본 5개
+        recent_inbounds = database_manager.get_recent_inbounds(limit=limit)
+        if recent_inbounds:
+            response_messages = [f"최신 입고 기록 {len(recent_inbounds)}건입니다:"]
+            for item in recent_inbounds:
+                p_name, qty, date, supplier = item[0], item[1], item[2].strftime('%Y-%m-%d %H:%M'), item[3]
+                response_messages.append(f"- {p_name} {qty}개 ({date}, 공급처: {supplier})")
+            return "\n".join(response_messages)
+        else:
+            return "최신 입고 기록이 없습니다."
+
+    elif action == "query_outbound_history": # 새로운 액션 처리
+        limit = entities.get('limit', 5) # 기본 5개
+        recent_outbounds = database_manager.get_recent_outbounds(limit=limit)
+        if recent_outbounds:
+            response_messages = [f"최신 출고 기록 {len(recent_outbounds)}건입니다:"]
+            for item in recent_outbounds:
+                p_name, qty, date, customer = item[0], item[1], item[2].strftime('%Y-%m-%d %H:%M'), item[3]
+                response_messages.append(f"- {p_name} {qty}개 ({date}, 고객: {customer})")
+            return "\n".join(response_messages)
+        else:
+            return "최신 출고 기록이 없습니다."
+
     elif action == "unknown":
         return "죄송합니다. 요청하신 내용을 정확히 이해하지 못했습니다. 입고, 출고, 재고 조회 또는 로케이션별 제품 조회와 같은 WMS 관련 명령으로 다시 말씀해 주시겠어요?"
 
