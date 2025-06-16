@@ -40,8 +40,8 @@ try:
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_NAME, 
-        quantization_config=nf4_config,
-        device_map="auto"
+        # quantization_config=nf4_config, # 양자화 설정 임시 비활성화
+        # device_map="auto" # 장치 매핑 임시 비활성화
     )
     model.eval()
     print("Gemma 모델 로딩 완료!")
@@ -80,8 +80,17 @@ def role_required(allowed_roles):
     return decorator
 
 
+# --- 사용자 입력 전처리 함수 ---
+def preprocess_user_input(user_input):
+    # '5대', '2박스', '3개', '4ea', '10box' 등 숫자+단위 패턴을 '숫자'로 변환
+    # 예: '노트북 5대 입고' -> '노트북 5 입고'
+    pattern = r"(\d+)\s*(개|대|박스|box|ea|EA|Box|BOX)"
+    return re.sub(pattern, r"\1", user_input)
+
 # --- AI 응답 생성 함수 (Gemma 활용 및 WMS 연동) ---
 def generate_ai_response(user_input):
+    user_input = preprocess_user_input(user_input)
+
     global current_conversation_state 
 
     if tokenizer is None or model is None:
@@ -119,61 +128,115 @@ def generate_ai_response(user_input):
 
     # --- Gemma 모델에게 의도/개체명 추출 지시 ---
     SYSTEM_PROMPT = """
-    당신은 창고 관리 시스템(WMS)의 AI 비서입니다. 사용자의 질문을 분석하여 요청하는 '액션(action)'과 '개체명(entities)'을 JSON 형식으로 추출해야 합니다. JSON 형식으로만 응답하며, 다른 설명은 추가하지 마세요.
+    오직 다음 JSON 형식으로만 응답하세요. 다른 설명, 마크다운(```), 별표(*), 숫자, 글머리 기호(-), 참고, 주의 사항 등 어떠한 비-JSON 텍스트도 절대 포함하지 마세요.
 
     가능한 액션(action) 목록:
-    - "query_stock": 현재 재고를 조회하는 요청 (예: 재고 현황, 현재 재고, 전체 재고 등. 재고와 관련된 다양한 표현 포함)
-    - "query_location_items": 특정 로케이션에 있는 품목을 조회하는 요청 (예: A-01-01에 뭐가 있어?, B-02-01 제품 알려줘 등)
-    - "inbound": 제품을 입고하는 요청 (예: 노트북 5개 입고해 줘, 펜 100개 넣어줘 등)
-    - "outbound": 제품을 출고하는 요청 (예: 노트북 2개 출고해 줘, 무선 마우스 1개 판매, HDMI 케이블 100개 출하 등)
-    - "query_inbound_history": 입고 기록을 조회하는 요청 (입고와 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현 포함)
-    - "query_outbound_history": 출고 기록을 조회하는 요청 (출고와 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현 포함)
-    - "unknown": 위 액션에 해당하지 않는 일반적인 질문 또는 이해할 수 없는 요청
-
-    ※ 사용자가 입고/출고/재고/로케이션 등과 관련된 현황, 내역, 목록, 리스트, 이력 등 다양한 표현을 사용해도, 의미에 맞는 액션으로 해석하세요.
+    - "query_stock": 현재 재고 조회
+    - "query_location_items": 특정 로케이션 품목 조회
+    - "inbound": 제품 입고
+    - "outbound": 제품 출고
+    - "query_inbound_history": 입고 기록 조회
+    - "query_outbound_history": 출고 기록 조회
+    - "unknown": 이해할 수 없는 요청
 
     개체명(entities)은 다음과 같습니다:
-    - product_name (string, 제품명): 조회/입고/출고할 제품 이름 (예: "노트북 컴퓨터", "무선 마우스")
-    - quantity (integer, 수량): 입고/출고할 제품의 수량 (숫자)
-    - location_code (string, 로케이션 코드): 로케이션의 고유 코드 (예: "A-01-01", "B-02-01")
-    - all_stock (boolean, 전체 재고): 전체 재고를 요청하는 경우 (true)
-    - limit (integer, 개수 제한): 기록 조회 시 보여줄 최대 개수 (예: 5개, 10개)
-
-    응답은 반드시 하나의 JSON 객체여야 합니다.
+    - product_name (string, 제품명)
+    - quantity (integer, 수량)
+    - location_code (string, 로케이션 코드)
+    - all_stock (boolean, 전체 재고)
+    - limit (integer, 개수 제한)
 
     예시:
+    사용자: 노트북 5 입고
+    응답: {"action": "inbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 5}}
     사용자: 입고 현황 알려줘
     응답: {"action": "query_inbound_history", "entities": {"limit": 5}}
-    사용자: 입고 내역 보여줘
-    응답: {"action": "query_inbound_history", "entities": {}}
-    사용자: 출고 현황 알려줘
-    응답: {"action": "query_outbound_history", "entities": {"limit": 5}}
-    사용자: 출고 내역 보여줘
-    응답: {"action": "query_outbound_history", "entities": {}}
-    사용자: 노트북 5개 입고해 줘
-    응답: {"action": "inbound", "entities": {"product_name": "노트북 컴퓨터", "quantity": 5}}
-    사용자: 무선 마우스 재고는?
-    응답: {"action": "query_stock", "entities": {"product_name": "무선 마우스"}}
-    사용자: 전체 재고 보여줘
-    응답: {"action": "query_stock", "entities": {"all_stock": true}}
-    사용자: A-01-01에 뭐가 있어?
-    응답: {"action": "query_location_items", "entities": {"location_code": "A-01-01"}}
     사용자: 안녕하세요
     응답: {"action": "unknown", "entities": {}}
     """
 
     # Gemma 모델을 사용하여 사용자 입력 분석
-    full_prompt = SYSTEM_PROMPT.replace("{user_input}", user_input)
-    input_ids = tokenizer(full_prompt, return_tensors="pt").to(model.device)
-    outputs = model.generate(**input_ids, max_new_tokens=200, do_sample=True, top_p=0.9, temperature=0.7)
-    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    full_prompt = f"""사용자: {user_input}
+
+응답은 다음 JSON 형이어야 합니다:
+{{
+    "action": "query_inbound_history",
+    "entities": {{
+        "limit": 5
+    }}
+}}
+
+가능한 action 값:
+- query_stock: 현재 재고 조회
+- query_location_items: 특정 로케이션 품목 조회
+- inbound: 제품 입고
+- outbound: 제품 출고
+- query_inbound_history: 입고 기록 조회
+- query_outbound_history: 출고 기록 조회
+- unknown: 이해할 수 없는 요청
+
+예시:
+- 입고 현황/내역 -> query_inbound_history
+- 출고 현황/내역 -> query_outbound_history
+- 재고 조회 -> query_stock
+- 로케이션 조회 -> query_location_items
+
+응답:"""
     
-    # 프롬프트 부분을 제거하고 순수 AI 응답만 추출
-    ai_json_response_raw = generated_text.replace(full_prompt, "").strip()
-    print(f"Gemma 모델의 JSON 원시 응답: {ai_json_response_raw}") # 디버깅을 위해 출력
+    print(f"모델에 전달되는 full_prompt: {full_prompt}")
+    
+    input_ids = tokenizer(full_prompt, return_tensors="pt").to(model.device)
+    
+    outputs = model.generate(
+        **input_ids,
+        max_new_tokens=50,
+        do_sample=False,  # 결정론적 출력
+        temperature=1.0,
+        top_p=1.0,
+        num_return_sequences=1,
+        pad_token_id=tokenizer.pad_token_id,
+        eos_token_id=tokenizer.eos_token_id,
+        repetition_penalty=1.2  # 반복 방지
+    )
+    
+    print(f"모델 출력 shape: {outputs.shape}")
+    print(f"모델 출력 토큰: {outputs[0]}")
+    
+    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    print(f"디코딩된 전체 텍스트: {generated_text}")
+    
+    # 모델 생성 텍스트에서 실제 JSON 응답만 추출
+    json_match = re.search(r'응답\s*:\s*(\{[\s\S]*?\})', generated_text)
+    if json_match:
+        ai_json_response_raw = json_match.group(1).strip()
+        print(f"Gemma 모델의 JSON 원시 응답 (정규식 추출): {ai_json_response_raw}")
+    else:
+        ai_json_response_raw = generated_text.replace(full_prompt, "").strip()
+        print(f"Gemma 모델의 JSON 원시 응답 (replace): {ai_json_response_raw}")
+
+    # 중괄호 자동 닫기 적용
+    ai_json_response_raw = auto_close_braces(ai_json_response_raw)
+    print(f"중괄호 자동 닫기 적용 후: {ai_json_response_raw}")
+
+    # 마크다운 코드 블록을 포함할 수 있으므로 먼저 제거합니다.
+    cleaned_generated_text = ai_json_response_raw.strip()
+    cleaned_generated_text = re.sub(r'^```(?:json)?\s*', '', cleaned_generated_text)
+    cleaned_generated_text = re.sub(r'\s*```$', '', cleaned_generated_text)
+
+    print(f"Gemma 모델의 클리닝된 생성 텍스트 (마크다운 제거): {cleaned_generated_text}") # 디버깅 추가
+
+    # 이제 이 클리닝된 텍스트에서 JSON 객체만 찾습니다.
+    start_idx = cleaned_generated_text.find('{')
+    end_idx = cleaned_generated_text.rfind('}')
+
+    ai_json_response_raw = "" # JSON 최종 후보
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        ai_json_response_raw = cleaned_generated_text[start_idx : end_idx + 1]
+
+    print(f"Gemma 모델의 JSON 원시 응답 (최종 후보): {ai_json_response_raw}") # 디버깅을 위해 출력
 
     # JSON 파싱 시도 (2단계 파싱 구조)
-    parsed_intent = {"action": "unknown", "entities": {}} # 초기값 설정
+    parsed_intent = {"action": "unknown", "entities": {}}
     
     try:
         # 1단계 파싱 시도: 원시 응답을 직접 json5로 로드 (대부분의 경우 성공 기대)
@@ -181,63 +244,44 @@ def generate_ai_response(user_input):
         action = parsed_intent.get('action')
         entities = parsed_intent.get('entities', {})
         print(f"1단계 파싱 성공: 액션: {action}, 개체명: {entities}") # 디버깅
-        # 1단계 파싱 성공 후 후처리: '입고'와 '현황/내역/목록/리스트/이력'이 함께 있으면 query_inbound_history로 강제 변환
-        # (띄어쓰기/붙여쓰기 모두 허용)
-        norm_input = re.sub(r"\s+", "", user_input)  # 모든 공백 제거
-        if action == "query_stock":
-            if (
-                re.search(r"입고.*(현황|내역|목록|리스트|이력)", user_input)
-                or re.search(r"(현황|내역|목록|리스트|이력).*입고", user_input)
-                or re.search(r"입고(현황|내역|목록|리스트|이력)", norm_input)
-                or re.search(r"(현황|내역|목록|리스트|이력)입고", norm_input)
-            ):
-                action = "query_inbound_history"
-                entities = {k: v for k, v in entities.items() if k != "all_stock"}
-                print(f"후처리: '입고' + '현황/내역/목록/리스트/이력' 조합(띄어쓰기/붙여쓰기 무관) → query_inbound_history로 강제 변환")
+        action, entities = postprocess_intent(action, entities, user_input)
+        print(f"[후처리 최종] action: {action}, entities: {entities}")
         return _process_parsed_intent(action, entities)
-    except (json.JSONDecodeError, ValueError) as e1: # Json5DecodeError 제거
+    except (json.JSONDecodeError, ValueError) as e1:
         print(f"1단계 파싱 실패: {e1}. 2단계 클리닝 시도.")
-        
-        # 2단계 파싱 시도: 강력한 클리닝 후 json5로 로드
+        json_candidate = ""
         try:
-            clean_json_str = ai_json_response_raw.strip().replace('```json', '').replace('```', '').strip()
-            
-            # 모든 비인쇄 문자 및 숨겨진 유니코드 공백 문자 제거 (정규표현식 변경)
-            # 유니코드 카테고리를 사용하는 정규표현식은 호환성 문제가 있을 수 있으므로, 
-            # 직접 허용되는 문자를 정의하고 나머지를 제거하는 방식으로 변경
-            # 한글 유니코드 범위: \uAC00-\uD7A3
-            # \w: 알파벳, 숫자, 언더스코어 (단어 문자)
-            # \s: 공백 문자 (탭, 줄바꿈 포함)
-            # { } [ ] : , . " - : JSON 구조에 필요한 특수 문자
-            # 즉, 단어 문자, 공백, 한글, 그리고 JSON 구조에 필요한 특수 문자만 남깁니다.
-            clean_json_str = re.sub(r'[^\w\s\uAC00-\uD7A3\{\}\[\]:,."_\-]', '', clean_json_str) 
+            # 원시 응답에서 첫 번째 '{'와 마지막 '}' 사이의 문자열을 추출
+            start_idx = ai_json_response_raw.find('{')
+            end_idx = ai_json_response_raw.rfind('}')
 
-            # JSON 객체 시작 '{'부터 끝 '}'까지 비탐욕적으로 찾음
-            json_match = re.search(r'\{.*?\}', clean_json_str, re.DOTALL) 
-            
-            if json_match:
-                json_string = json_match.group(0)
-                parsed_intent = json5.loads(json_string) # json5를 사용하여 파싱
-                action = parsed_intent.get('action')
-                entities = parsed_intent.get('entities', {})
-                print(f"2단계 파싱 성공 (클리닝): 액션: {action}, 개체명: {entities}") # 디버깅
-                return _process_parsed_intent(action, entities)
-            else:
-                print(f"2단계 파싱 실패: JSON 객체를 찾을 수 없습니다. 원시 응답: {ai_json_response_raw}")
-                action = "unknown"
-                entities = {}
+            if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                json_candidate = ai_json_response_raw[start_idx : end_idx + 1]
+
+            print(f"2단계 클리닝 후 JSON 후보: '{json_candidate}'") # 디버깅 추가
+
+            # 마크다운 코드 블록 제거 (선택적, 위에 { } 추출이 더 중요)
+            json_candidate = re.sub(r'^```(?:json)?\s*', '', json_candidate)
+            json_candidate = re.sub(r'\s*```$', '', json_candidate)
+
+            parsed_intent = json5.loads(json_candidate) # json5를 사용하여 파싱
+            action = parsed_intent.get('action')
+            entities = parsed_intent.get('entities', {})
+            print(f"2단계 파싱 성공 (클리닝): 액션: {action}, 개체명: {entities}") # 디버깅
+            action, entities = postprocess_intent(action, entities, user_input)
+            print(f"[후처리 최종] action: {action}, entities: {entities}")
+            return _process_parsed_intent(action, entities)
         except (json.JSONDecodeError, ValueError) as e2: # 2단계 파싱 실패 (Json5DecodeError 제거)
-            print(f"2단계 파싱도 실패: {e2}. 최종 unknown 처리.")
+            print(f"2단계 파싱도 실패: {e2}. 최종 unknown 처리. 원시 응답: {ai_json_response_raw}")
+            print(f"시도된 JSON 후보: '{json_candidate}'") # 디버깅 추가
             action = "unknown"
             entities = {}
         except Exception as e3:
             print(f"응답 처리 중 예기치 않은 예외 오류: {e3}")
             action = "unknown"
             entities = {}
-    
     # 모든 파싱 시도 실패 시 최종 unknown 처리 (이 부분이 실행될 일은 거의 없어야 함)
     return _process_parsed_intent(parsed_intent.get('action', 'unknown'), parsed_intent.get('entities', {}))
-
 
 # --- 파싱된 의도와 개체명을 바탕으로 WMS 기능 실행 (헬퍼 함수로 분리) ---
 def _process_parsed_intent(action, entities):
@@ -261,28 +305,26 @@ def _process_parsed_intent(action, entities):
 
     if action == "query_stock":
         if entities.get('all_stock'):
-            stock_info = database_manager.get_current_stock(product_name=None)
-            if stock_info:
-                response_messages = ["현재 모든 제품의 재고 현황입니다:"]
-                for item in stock_info:
-                    p_name, total_qty, locations = item[0], item[1], item[2]
-                    location_text = f"({locations})" if locations else "(위치 미지정)"
-                    response_messages.append(f"- {p_name}: {total_qty}개 {location_text}")
-                return "\n".join(response_messages) 
-            else:
+            stock_info = database_manager.get_current_stock(product_name=None, all_stock=True)
+            if not stock_info:
                 return "현재 재고 정보가 없습니다. 입고된 제품이 없거나 데이터베이스에 문제가 있을 수 있습니다."
+            response_messages = ["현재 모든 제품의 재고 현황입니다:"]
+            for item in stock_info:
+                p_name, total_qty, locations = item[0], item[1], item[2]
+                location_text = f"({locations})" if locations else "(위치 미지정)"
+                response_messages.append(f"- {p_name}: {total_qty}개 {location_text}")
+            return "\n".join(response_messages) 
         elif entities.get('product_name'):
             product_name = entities['product_name']
-            stock_info = database_manager.get_current_stock(product_name=product_name)
-            if stock_info:
-                response_messages = [f"'{product_name}'의 현재 재고는 다음과 같습니다:"]
-                for item in stock_info:
-                    p_name, total_qty, locations = item[0], item[1], item[2]
-                    location_text = f"({locations})" if locations else "(위치 미지정)"
-                    response_messages.append(f"- {p_name}: {total_qty}개 {location_text}")
-                return "\n".join(response_messages) 
-            else:
-                return f"죄송합니다. '{product_name}'에 대한 재고 정보를 찾을 수 없습니다. 제품명을 다시 확인해주세요."
+            stock_info = database_manager.get_current_stock(product_name=product_name, all_stock=False)
+            if not stock_info:
+                return f"'{product_name}'의 재고 정보가 없습니다. 제품명이 정확한지 확인해 주세요."
+            response_messages = [f"'{product_name}'의 현재 재고는 다음과 같습니다:"]
+            for item in stock_info:
+                p_name, total_qty, locations = item[0], item[1], item[2]
+                location_text = f"({locations})" if locations else "(위치 미지정)"
+                response_messages.append(f"- {p_name}: {total_qty}개 {location_text}")
+            return "\n".join(response_messages) 
         else:
             return "어떤 재고 정보를 조회하시겠습니까? 제품명을 알려주시거나 '전체 재고'라고 말씀해주세요."
     
@@ -310,32 +352,27 @@ def _process_parsed_intent(action, entities):
         location_code = entities.get('location_code') 
 
         if product_name and quantity is not None:
+            # DB 결과값 체크 및 예외 처리
             product_info = database_manager.get_product_id(product_name)
-            if product_info:
-                product_id, actual_product_name = product_info[0], product_info[1]
+            if not product_info:
+                return f"'{product_name}'이라는 제품을 찾을 수 없습니다. 제품명을 다시 확인해 주세요."
+            product_id, actual_product_name = product_info[0], product_info[1]
 
-                if location_code: 
-                    location_info = database_manager.get_location_id(location_code)
-                    if location_info:
-                        location_id, actual_location_code = location_info[0], location_info[1]
-                        if database_manager.record_inbound(product_id, quantity, location_id):
-                            return f"'{actual_product_name}' {quantity}개를 '{actual_location_code}' 로케이션에 성공적으로 입고 처리했습니다. 재고가 업데이트되었습니다."
-                        else:
-                            return f"'{actual_product_name}' {quantity}개 입고 중 오류가 발생했습니다. 다시 시도해주세요."
-                    else:
-                        current_conversation_state['action'] = 'awaiting_location'
-                        current_conversation_state['product_id'] = product_id
-                        current_conversation_state['quantity'] = quantity
-                        current_conversation_state['product_name'] = actual_product_name
-                        return f"죄송합니다. '{location_code}'이라는 로케이션을 찾을 수 없습니다. '{actual_product_name}' {quantity}개를 입고 처리하겠습니다. 어느 로케이션에 보관하시겠습니까? (예: A-01-01)"
-                else: 
-                    current_conversation_state['action'] = 'awaiting_location'
-                    current_conversation_state['product_id'] = product_id
-                    current_conversation_state['quantity'] = quantity
-                    current_conversation_state['product_name'] = actual_product_name
-                    return f"알겠습니다. '{actual_product_name}' {quantity}개를 입고 처리하겠습니다. 어느 로케이션에 보관하시겠습니까? (예: A-01-01)"
+            if location_code: 
+                location_info = database_manager.get_location_id(location_code)
+                if not location_info:
+                    return f"'{location_code}'이라는 로케이션을 찾을 수 없습니다. 정확한 로케이션 코드를 입력해 주세요. (예: A-01-01)"
+                location_id, actual_location_code = location_info[0], location_info[1]
+                if database_manager.record_inbound(product_id, quantity, location_id):
+                    return f"'{actual_product_name}' {quantity}개를 '{actual_location_code}' 로케이션에 성공적으로 입고 처리했습니다. 재고가 업데이트되었습니다."
+                else:
+                    return f"'{actual_product_name}' {quantity}개 입고 중 오류가 발생했습니다. 다시 시도해주세요."
             else:
-                return f"죄송합니다. '{product_name}'이라는 제품을 찾을 수 없습니다. 정확한 제품명을 알려주시거나, 먼저 제품 등록을 요청해주세요."
+                current_conversation_state['action'] = 'awaiting_location'
+                current_conversation_state['product_id'] = product_id
+                current_conversation_state['quantity'] = quantity
+                current_conversation_state['product_name'] = actual_product_name
+                return f"알겠습니다. '{actual_product_name}' {quantity}개를 입고 처리하겠습니다. 어느 로케이션에 보관하시겠습니까? (예: A-01-01)"
         else:
             return "어떤 제품을 몇 개 입고하시겠습니까? (예: 노트북 5개)"
 
@@ -596,6 +633,123 @@ def chat():
 
     return jsonify({'response': ai_response})
 
+
+# --- 자동 중괄호 닫기 함수 추가 ---
+def auto_close_braces(json_str):
+    open_count = json_str.count('{')
+    close_count = json_str.count('}')
+    if open_count > close_count:
+        json_str += '}' * (open_count - close_count)
+    return json_str
+
+def postprocess_intent(action, entities, user_input):
+    norm_input = re.sub(r"\s+", "", user_input)
+    # '전체 재고' 또는 '전체 재고 현황' 등 전체 재고 질의는 무조건 query_stock + all_stock=True
+    if re.search(r"전체\s*재고(\s*현황)?", user_input) or norm_input.startswith("전체재고"):
+        action = "query_stock"
+        entities = {"all_stock": True}  # 기존 entities를 덮어쓰기
+        print("후처리: '전체 재고' 질의로 인식되어 query_stock + all_stock=True로 강제 분기")
+        return action, entities  # 전체 재고 조회는 다른 후처리 무시하고 바로 반환
+    
+    # '출고' 키워드가 있고 action이 outbound가 아니면 무조건 outbound로 강제 변환
+    if (
+        re.search(r"출고", user_input)
+        and action != "outbound"
+    ):
+        action = "outbound"
+        print("후처리: '출고' 키워드가 있으나 action이 outbound가 아니어서 outbound로 강제 변환")
+    
+    # '입고' 키워드가 있고 action이 inbound가 아니면 무조건 inbound로 강제 변환
+    if (
+        re.search(r"입고", user_input)
+        and action != "inbound"
+    ):
+        action = "inbound"
+        print("후처리: '입고' 키워드가 있으나 action이 inbound가 아니어서 inbound로 강제 변환")
+    
+    # 출고 현황/내역/목록/리스트/이력 → query_outbound_history (띄어쓰기/붙여쓰기 무관)
+    if (
+        re.search(r"출고.*(현황|내역|목록|리스트|이력)", user_input)
+        or re.search(r"(현황|내역|목록|리스트|이력).*출고", user_input)
+        or re.search(r"출고(현황|내역|목록|리스트|이력)", norm_input)
+        or re.search(r"(현황|내역|목록|리스트|이력)출고", norm_input)
+    ):
+        action = "query_outbound_history"
+        entities = {k: v for k, v in entities.items() if k != "all_stock"}
+        print(f"후처리: '출고' + '현황/내역/목록/리스트/이력' 조합(띄어쓰기/붙여쓰기 무관) → query_outbound_history로 강제 변환")
+    
+    # 재고 현황/내역/목록/리스트/이력/조회 → query_stock (띄어쓰기/붙여쓰기 무관)
+    if (
+        re.search(r"재고.*(현황|내역|목록|리스트|이력|조회)", user_input)
+        or re.search(r"(현황|내역|목록|리스트|이력|조회).*재고", user_input)
+        or re.search(r"재고(현황|내역|목록|리스트|이력|조회)", norm_input)
+        or re.search(r"(현황|내역|목록|리스트|이력|조회)재고", norm_input)
+    ):
+        action = "query_stock"
+        # 제품명이 명시되지 않은 재고 질의(예: '재고 현황', '전체 재고 현황', '전체 재고')는 product_name 제거, all_stock=True
+        if (entities.get("product_name") and entities["product_name"].strip() in ["재고", "재고현황", "현황", "재고 조회", "재고현황조회", "", "전체", "전체재고", "전체 재고", "전체 재고 현황"]):
+            print("후처리: 제품명이 없는 재고 질의(또는 전체 재고 질의)로 인식되어 product_name 제거 및 all_stock=True 설정")
+            entities = {"all_stock": True}  # 기존 entities를 덮어쓰기
+        else:
+            entities = {k: v for k, v in entities.items() if k != "all_stock"}
+        print(f"후처리: '재고' 관련 질의(띄어쓰기/붙여쓰기 무관) → query_stock으로 강제 변환")
+    
+    # '입고 현황/내역/이력/목록/리스트' → query_inbound_history
+    if (
+        re.search(r"입고.*(현황|내역|목록|리스트|이력)", user_input)
+        or re.search(r"(현황|내역|목록|리스트|이력).*입고", user_input)
+        or re.search(r"입고(현황|내역|목록|리스트|이력)", norm_input)
+        or re.search(r"(현황|내역|목록|리스트|이력)입고", norm_input)
+    ):
+        action = "query_inbound_history"
+        print("후처리: '입고' + '현황/내역/목록/리스트/이력' 조합 → query_inbound_history로 강제 변환")
+    
+    # action이 inbound일 때 product_name, quantity 자동 추출 보완 (정규식 개선)
+    if action == "inbound":
+        match = re.search(r"(.+?)\s*(\d+)\s*(개|대|박스|box|ea|EA|Box|BOX)?\s*(입고|출고)?", user_input)
+        if match:
+            name = match.group(1).strip()
+            qty = int(match.group(2))
+            if not entities.get("product_name"):
+                entities["product_name"] = name
+            if not entities.get("quantity"):
+                entities["quantity"] = qty
+            print(f"후처리: 입력에서 product_name/quantity 자동 추출 및 보완: {name}, {qty}")
+    
+    # action이 outbound일 때 product_name, quantity 자동 추출 보완
+    if action == "outbound":
+        match = re.search(r"(.+?)\s*(\d+)\s*(개|대|박스|box|ea|EA|Box|BOX)?\s*(출고)?", user_input)
+        if match:
+            name = match.group(1).strip()
+            qty = int(match.group(2))
+            if not entities.get("product_name"):
+                entities["product_name"] = name
+            if not entities.get("quantity"):
+                entities["quantity"] = qty
+            print(f"후처리: 입력에서 product_name/quantity 자동 추출 및 보완(출고): {name}, {qty}")
+    
+    # 로케이션 재고/현황/조회 등 → query_location_items + location_code 자동 추출
+    location_match = re.search(r"([A-Za-z]\d{2}-\d{2}|[A-Za-z]-\d{2}-\d{2})", user_input)
+    if (
+        (re.search(r"로케이션|location", user_input, re.IGNORECASE) or location_match)
+        and (re.search(r"재고|현황|조회|품목|아이템|item", user_input))
+    ):
+        if location_match:
+            location_code = location_match.group(1)
+            action = "query_location_items"
+            entities = {"location_code": location_code}  # 기존 entities를 덮어쓰기
+            print(f"후처리: 로케이션 질의 → query_location_items + location_code={location_code}로 강제 변환")
+    
+    # action이 query_stock일 때 product_name 자동 추출 보완
+    if action == "query_stock":
+        match = re.search(r"([가-힣A-Za-z0-9_\- ]+?)\s*(재고|재고현황|재고 조회|현황|조회)", user_input)
+        if match:
+            name = match.group(1).strip()
+            if not entities.get("product_name") and name not in ["재고", "재고현황", "현황", "재고 조회", "재고현황조회", "", "전체", "전체재고", "전체 재고", "전체 재고 현황"]:
+                entities["product_name"] = name
+            print(f"후처리: 입력에서 product_name 자동 추출 및 보완(재고): {name}")
+    
+    return action, entities
 
 # --- 앱 실행 ---
 if __name__ == '__main__':
